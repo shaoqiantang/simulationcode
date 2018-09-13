@@ -1,0 +1,80 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+### Install packages if not exist, otherwise ignore.
+#install.packages("CausalImpact")
+#install.packages("readxl")
+#install.packages("tidyverse")
+library(CausalImpact)
+library(readxl)
+library(tidyverse)
+library(readr)
+library(dplyr)
+```
+
+```{r}
+### input filepath
+### if your file is csv, make sure to change next code into "read_csv"
+file_path = '/Users/ntang/Downloads/timeseries_date_filtered.xlsx'
+data <- read_excel(file_path) ### make sure data can be read 
+
+### input the number of the key column
+key = 3 
+
+### input the number(s) of the correlated column(s) 
+cor = c(2,6,9,12) 
+
+### Make sure (1)date column is named "date" in your data and (2) it's in date format.
+```
+
+```{r}
+### Run the following code
+cut_one = nrow(data) -7
+cut_two = nrow(data) -14
+cut_three = nrow(data) - 21
+cut_four = nrow(data) - 28
+cut = c(cut_one, cut_two, cut_three, cut_four)
+week = c('one_week', 'two_weeks', 'three_weeks', 'four_weeks')
+df <- cbind(data[key],data[cor])
+Simulation_results <- NULL
+for(i in 1:4) {
+  pre.period <- c(1, cut[i])
+  post.period <- c(cut[i]+1,nrow(df))
+  impact <- CausalImpact(df, pre.period, post.period)
+  results <- impact$summary[1,]
+  for(j in 1:10) {
+    data_copy = df
+    data_copy[(cut[i]+1):nrow(data_copy), 1] = data_copy[(cut[i]+1):nrow(data_copy), 1] * (1+j/100)
+    impact <- CausalImpact(data_copy, pre.period, post.period)
+    results <- rbind(results, impact$summary[1,])
+  }
+  results$week <- week[i]
+  results <- results %>% select(week, everything())
+  row.names(results) <- c('0%','1%','2%','3%','4%','5%','6%','7%','8%','9%','10%')
+  results <- rownames_to_column(results, "Simulation")
+  Simulation_results <- rbind(Simulation_results, results)
+}
+Simulation_results
+write_csv(results, 'simulation_week_results.csv') 
+### results are written in your local directory
+```
+INTERPRETATION: 
+
+For any simulation changes from 0% to 10% ranging from 1 week to 4 weeks,
+
+During the post-intervention period, the response variable had an average value of approx. [Actual]. By contrast, in the absence of an intervention, we would have expected an average response of [Pred]. The 95% interval of this counterfactual prediction is [Pred.lower, Pred.upper]. Subtracting this prediction from the observed response yields an estimate of the causal effect the intervention had on the response variable. This effect is [AbsEffect] with a 95% interval of [AbsEffect.lower, AbsEffect.Upper]. For a discussion of the significance of this effect, see below.
+
+In relative terms, the response variable showed an increase of [RelEffect]. The 95% interval of this percentage is [RelEffect.lower, RelEffect.upper].
+
+This means that the [positive/negative] effect observed during the intervention period is statistically significant and unlikely to be due to random fluctuations if [RelEffect.lower, RelEffect.upper] is all [positive/negative] . It should be noted, however, that the question of whether this increase also bears substantive significance can only be answered by comparing the absolute effect to the original goal of the underlying intervention.
+
+The probability of obtaining this effect by chance is (Bayesian one-sided tail-area probability p). This means the causal effect can be considered statistically significant if p < 0.05.
+
+
